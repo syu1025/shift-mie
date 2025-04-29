@@ -3,10 +3,10 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
-use LINE\LINEBot;
-use LINE\LINEBot\Constant\HTTPHeader;
-use LINE\LINEBot\Event\MessageEvent\TextMessage;
-use LINE\LINEBot\HTTPClient\CurlHTTPClient;
+use LINE\Clients\MessagingApi\Api\MessagingApiApi;
+use LINE\Clients\MessagingApi\Configuration;
+use GuzzleHttp\Client;
+use App\Models\LineMessage; // LineMessageモデルを追加
 
 /*
 |--------------------------------------------------------------------------
@@ -23,39 +23,57 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-$httpClient = new CurlHTTPClient($_ENV['LINE_CHANNEL_ACCESS_TOKEN']);
-$bot = new LINEBot($httpClient, ['channelSecret' => $_ENV['LINE_CHANNEL_SECRET']]);
-
-// ルート定義を修正 - /api/webhook に変更
-Route::post('/webhook', function (Request $request) use ($bot) {
-    // 必要最小限のログ記録に留める
-    Log::debug('Webhook received');
-
-    $signature = $request->header(HTTPHeader::LINE_SIGNATURE);
-    if (empty($signature)) {
-        return abort(400);
-    }
+// LINEボット設定を修正
+Route::post('/webhook', function (Request $request) {
+    Log::debug('Webhook received', ['request' => $request->all()]);
 
     try {
-        // 署名検証
-        $events = $bot->parseEventRequest($request->getContent(), $signature);
+        $client = new Client();
+        $config = new Configuration();
+        $config->setAccessToken(env('LINE_CHANNEL_ACCESS_TOKEN'));
+        $messagingApi = new MessagingApiApi(
+            client: $client,
+            config: $config,
+        );
 
-        // 先に応答を返す (重要)
-        response('OK', 200)->send();
-
-        // 応答を返した後でイベント処理 (タイムアウトを避けるため)
-        foreach ($events as $event) {
-            if ($event instanceof TextMessage) {
-                $bot->replyText($event->getReplyToken(), $event->getText());
-            }
-            // 他のイベントタイプの処理を追加
+        $events = $request->input('events');
+        if (empty($events)) {
+            Log::warning('No events in webhook request');
+            return response()->json(['message' => 'No events'], 200);
         }
 
-        // 応答は既に送信済みなのでここでは何も返さない
-        exit;
+        foreach ($events as $event) {
+            if ($event['type'] !== 'message' || $event['message']['type'] !== 'text') {
+                continue;
+            }
 
+            $replyToken = $event['replyToken'];
+            $messageText = $event['message']['text'];
+
+            if (empty($messageText)) {
+                Log::warning('Empty message text received');
+                continue;
+            }
+
+            $messagingApi->replyMessage(
+                new \LINE\Clients\MessagingApi\Model\ReplyMessageRequest([
+                    'replyToken' => $replyToken,
+                    'messages' => [
+                        [
+                            'type' => 'text',
+                            'text' => $messageText
+                        ]
+                    ]
+                ])
+            );
+        }
+
+        return response()->json(['message' => 'OK'], 200);
     } catch (\Exception $e) {
-        Log::error('Webhook error: ' . $e->getMessage());
-        return abort(500);
+        Log::error('Webhook error: ' . $e->getMessage(), [
+            'exception' => $e,
+            'request' => $request->all()
+        ]);
+        return response()->json(['message' => 'Internal Server Error'], 500);
     }
 });
