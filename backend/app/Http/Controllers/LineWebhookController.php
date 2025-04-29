@@ -4,22 +4,69 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use LINE\LINEBot;
-use LINE\LINEBot\HTTPClient\CurlHTTPClient;
-use LINE\LINEBot\HTTPClient;
+use Illuminate\Support\Facades\Log;
+use LINE\Clients\MessagingApi\Api\MessagingApiApi;
+use LINE\Clients\MessagingApi\Configuration;
+use GuzzleHttp\Client;
+use App\Models\LineMessage;
 
 class LineWebhookController extends Controller
 {
     public function message(Request $request) {
-        $data = $request->all();
-        $events = $data['events'];
+        try {
+            $client = new Client();
+            $config = new Configuration();
+            $config->setAccessToken(env('LINE_CHANNEL_ACCESS_TOKEN'));
+            $messagingApi = new MessagingApiApi(
+                client: $client,
+                config: $config,
+            );
 
-        $httpClient = new CurlHTTPClient(config('services.line.message.channel_token'));
-        $bot = new LINEBot($httpClient, ['channelSecret' => config('services.line.message.channel_secret')]);
+            $events = $request->input('events');
+            if (empty($events)) {
+                Log::warning('No events in webhook request');
+                return response()->json(['message' => 'No events'], 200);
+            }
 
-        foreach ($events as $event) {
-            $response = $bot->replyText($event['replyToken'], 'メッセージ送信完了');
+            foreach ($events as $event) {
+                if ($event['type'] !== 'message' || $event['message']['type'] !== 'text') {
+                    continue;
+                }
+
+                $replyToken = $event['replyToken'];
+                $messageText = $event['message']['text'];
+                $lineUserId = $event['source']['userId'];
+
+                if (empty($messageText)) {
+                    Log::warning('Empty message text received');
+                    continue;
+                }
+
+                LineMessage::create([
+                    'line_user_id' => $lineUserId,
+                    'message' => $messageText
+                ]);
+
+                $messagingApi->replyMessage(
+                    new \LINE\Clients\MessagingApi\Model\ReplyMessageRequest([
+                        'replyToken' => $replyToken,
+                        'messages' => [
+                            [
+                                'type' => 'text',
+                                'text' => $messageText
+                            ]
+                        ]
+                    ])
+                );
+            }
+
+            return response()->json(['message' => 'OK'], 200);
+        } catch (\Exception $e) {
+            Log::error('Webhook error: ' . $e->getMessage(), [
+                'exception' => $e,
+                'request' => $request->all()
+            ]);
+            return response()->json(['message' => 'Internal Server Error'], 500);
         }
-        return;
     }
 }
