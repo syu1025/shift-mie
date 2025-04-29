@@ -42,8 +42,14 @@ class LineWebhookController extends Controller
                     continue;
                 }
 
+                // ユーザープロファイルを取得
+                $profile = $messagingApi->getProfile($lineUserId);
+                $userName = $profile->getDisplayName();
+                Log::info('User name: ' . $userName);
+
                 LineMessage::create([
                     'line_user_id' => $lineUserId,
+                    'user_name' => $userName, // ユーザー名を保存
                     'message' => $messageText
                 ]);
 
@@ -53,7 +59,7 @@ class LineWebhookController extends Controller
                         'messages' => [
                             [
                                 'type' => 'text',
-                                'text' => $messageText
+                                'text' => "{$userName}さん: {$messageText}"
                             ]
                         ]
                     ])

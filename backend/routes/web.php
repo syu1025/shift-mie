@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LineWebhookController;
+use App\Http\Controllers\LineMessageController;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,3 +18,9 @@ use App\Http\Controllers\LineWebhookController;
 Route::get('/', function () {
     return view('welcome');
 });
+
+Route::get('/index', function () {
+    return view('index');
+})->name('index');
+
+Route::get('/messages', [LineMessageController::class, 'index'])->name('messages.index');

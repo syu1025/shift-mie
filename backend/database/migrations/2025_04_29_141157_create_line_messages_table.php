@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('line_user_id');
             $table->text('message');
+            $table->string('user_name');
             $table->timestamps();
         });
     }
