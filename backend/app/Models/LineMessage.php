@@ -13,5 +13,15 @@ class LineMessage extends Model
         'line_user_id',
         'message',
         'user_name',
+        'start_time',
+        'end_time',
+        'time_format'
+    ];
+
+    protected $dates = [
+        'start_time',
+        'end_time',
+        'created_at',
+        'updated_at'
     ];
 }

@@ -16,6 +16,9 @@ return new class extends Migration
             $table->string('line_user_id');
             $table->text('message');
             $table->string('user_name');
+            $table->timestamp('start_time')->nullable();
+            $table->timestamp('end_time')->nullable();
+            $table->string('time_format')->nullable();
             $table->timestamps();
         });
     }

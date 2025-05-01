@@ -9,6 +9,7 @@ use LINE\Clients\MessagingApi\Api\MessagingApiApi;
 use LINE\Clients\MessagingApi\Configuration;
 use GuzzleHttp\Client;
 use App\Models\LineMessage;
+use App\Services\MessageParser;
 
 class LineWebhookController extends Controller
 {
@@ -47,11 +48,28 @@ class LineWebhookController extends Controller
                 $userName = $profile->getDisplayName();
                 Log::info('User name: ' . $userName);
 
-                LineMessage::create([
+                // メッセージから日時情報を解析
+                $dateTimeInfo = MessageParser::parseDateTime($messageText);
+
+                // メッセージを保存
+                $messageData = [
                     'line_user_id' => $lineUserId,
-                    'user_name' => $userName, // ユーザー名を保存
+                    'user_name' => $userName,
                     'message' => $messageText
-                ]);
+                ];
+
+                if ($dateTimeInfo) {
+                    $messageData['start_time'] = $dateTimeInfo['start_time'];
+                    $messageData['end_time'] = $dateTimeInfo['end_time'];
+                    $messageData['time_format'] = $dateTimeInfo['format'];
+                }
+
+                LineMessage::create($messageData);
+
+                // 日時情報が解析できた場合は、その情報も含めて返信
+                $replyMessage = $dateTimeInfo
+                    ? "{$userName}さんの予定を登録しました。\n{$dateTimeInfo['start_time']->format('Y/m/d H:i')}～{$dateTimeInfo['end_time']->format('H:i')}"
+                    : "{$userName}さん: {$messageText}";
 
                 $messagingApi->replyMessage(
                     new \LINE\Clients\MessagingApi\Model\ReplyMessageRequest([
@@ -59,7 +77,7 @@ class LineWebhookController extends Controller
                         'messages' => [
                             [
                                 'type' => 'text',
-                                'text' => "{$userName}さん: {$messageText}"
+                                'text' => $replyMessage
                             ]
                         ]
                     ])
