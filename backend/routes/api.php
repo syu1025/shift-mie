@@ -9,6 +9,7 @@ use LINE\Clients\MessagingApi\Configuration;
 use GuzzleHttp\Client;
 use App\Models\LineMessage; // LineMessageモデルを追加
 use App\Http\Controllers\LineWebhookController;
+use App\Http\Controllers\ShiftController;
 
 /*
 |--------------------------------------------------------------------------
@@ -28,3 +29,8 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 // LINEボット設定を修正
 Route::post('/webhook', [LineWebhookController::class, 'message'])->name('messageStore');
+
+Route::prefix('shifts')->group(function () {
+    Route::post('/', [ShiftController::class, 'store']);
+    Route::get('/', [ShiftController::class, 'index']);
+});
